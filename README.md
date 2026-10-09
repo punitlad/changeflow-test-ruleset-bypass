@@ -101,3 +101,5 @@ changeflow specifically did it" is a separate concern — hence two workflows, n
 job. `github.actor` was confirmed (against a real run) to reliably reflect the App's bot login
 for pushes resulting from its own API merges, which is what makes `app-merge.yml`'s scoping
 trustworthy rather than guesswork.
+
+<!-- human-path test: this PR was opened and merged by a human (punitlad), not the App -->
