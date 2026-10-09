@@ -1,11 +1,11 @@
-# PR-time required check. This is the thing the branch ruleset requires before a merge
-# can happen -- the App bypasses the requirement via the ruleset bypass list, but we still
-# want the check to actually run and report, for visibility/audit on every changeflow PR.
-#
-# Scoped to PRs opened by the App (job-level `if:`) because this repo is a single-purpose
-# automation target -- the only expected PR author is changeflow. DO NOT scope a *required*
-# status check like this on a repo that also takes human PRs: a job skipped via `if:` never
-# posts a status, so a human PR would wait forever on a check that never runs.
+# PR-time required check -- the ruleset's required_status_checks entry. Runs for *any* PR
+# into main, not scoped by author: this repo supports two ways onto main --
+#   - human: open a PR, this check has to pass, then merge normally (ruleset enforces it,
+#     no bypass for a human identity)
+#   - the App: also opens a PR (changeflow always does, regardless of merge mode), but is on
+#     the ruleset's bypass list, so it doesn't have to wait for this check to pass
+# Keep this unscoped. A required status check that's skipped via job-level `if:` never posts
+# a status at all, which would permanently block whichever path got excluded.
 name: ci
 on:
   pull_request:
@@ -13,7 +13,6 @@ on:
 jobs:
   validate:
     name: validate
-    if: github.event.pull_request.user.login == 'my-changeflow-app[bot]'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

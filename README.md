@@ -4,13 +4,28 @@ Validates `CHANGEFLOW_MERGE_MODE=ruleset_bypass` — changeflow merges the PR di
 `PUT /pulls/{n}/merge`, relying on the App being on the branch ruleset's bypass list rather
 than on any check passing.
 
+This repo deliberately supports **two ways onto `main`**, not just the App's:
+
+| Path | Flow | Gated by |
+|---|---|---|
+| Human | open a PR → `ci.yml`'s `validate` check must pass → merge normally | the ruleset (no bypass for a human identity) |
+| The App | open a PR (changeflow always does) → merge immediately via `PUT /pulls/{n}/merge` | the ruleset's bypass list |
+
+And correspondingly **two push-triggered actions**, not just one:
+
+| Workflow | Fires on | Scope |
+|---|---|---|
+| `deploy.yml` | any push to `main` | unscoped — "deploy to production" happens regardless of who merged it; this is what changeflow polls (`pipeline_workflow_file`) |
+| `app-merge.yml` | any push to `main` | scoped `if: github.actor == 'my-changeflow-app[bot]'` — only runs for merges the App itself performed |
+
 ## What's here
 
 | File | Purpose |
 |---|---|
 | `teams.json` | The file changeflow appends `{"team": "<name>"}` to |
-| `.github/workflows/ci.yml` | PR-time check, scoped to PRs opened by the App — the ruleset's required check (bypassed by the App, would block a human PR) |
-| `.github/workflows/deploy.yml` | The pipeline triggered by the merge, scoped to pushes actored by the App, gated by the `production` environment |
+| `.github/workflows/ci.yml` | PR-time check, unscoped — the ruleset's required check, satisfied by either path |
+| `.github/workflows/deploy.yml` | The general pipeline triggered by any merge, gated by the `production` environment |
+| `.github/workflows/app-merge.yml` | The App-specific counterpart action, only runs when the merge was the App's own |
 | `setup.sh` | One-time `gh` CLI setup for this repo (ruleset + bypass actor, environment) |
 
 ## Why this mode specifically needs this layout
@@ -75,17 +90,14 @@ curl -XPOST localhost:8000/team-onboardings -d '{"team":"payments","requested_by
 almost instantly (no wait on checks) — the App's `PUT /pulls/{n}/merge` call is what merges it,
 confirmed by the merge commit's author being the App's bot identity, not a human.
 
-## Identity-scoped gating (defense in depth on top of the bypass list)
+## Why app-merge.yml is a separate workflow, not a scoped deploy.yml
 
-Both workflows here are scoped to the App's identity rather than running unconditionally:
-
-- `ci.yml`'s `validate` job only runs `if: github.event.pull_request.user.login ==
-  'my-changeflow-app[bot]'`. Since this repo's only expected PR author is changeflow, this is
-  safe; **don't** do this on a repo that also takes human PRs against the same required check
-  (a skipped job never posts a status, so a human PR would block forever).
-- `deploy.yml`'s `deploy` job only runs `if: github.actor == 'my-changeflow-app[bot]'`.
-  Verified against a real run that `github.actor` reliably reflects the App's bot login for
-  pushes resulting from its own API merges (not just the ruleset bypass actor's identity on
-  paper — the actual push event attribution). This means the production pipeline only
-  auto-fires for merges changeflow itself performed, even though the ruleset bypass alone
-  would also permit e.g. an admin's direct push to land on `main` and trigger the same event.
+An earlier version of this repo scoped `deploy.yml` itself to the App's identity
+(`if: github.actor == '...'`), on the theory that it's defense in depth against e.g. an
+admin's direct push also triggering a deploy. That was wrong for this repo: it also blocks the
+*human* path's merges from ever deploying, which defeats having two ways onto `main` in the
+first place. "Deploy to production" should happen for anyone's merge; "do something because
+changeflow specifically did it" is a separate concern — hence two workflows, not one scoped
+job. `github.actor` was confirmed (against a real run) to reliably reflect the App's bot login
+for pushes resulting from its own API merges, which is what makes `app-merge.yml`'s scoping
+trustworthy rather than guesswork.
