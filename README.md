@@ -2,7 +2,8 @@
 
 Validates `CHANGEFLOW_MERGE_MODE=ruleset_bypass` — changeflow merges the PR directly via
 `PUT /pulls/{n}/merge`, relying on the App being on the branch ruleset's bypass list rather
-than on any check passing.
+than on any check passing. **Validated end-to-end, including both the human and App paths
+separately (see "What validated looks like" below) — this is the mode we're taking forward.**
 
 This repo deliberately supports **two ways onto `main`**, not just the App's:
 
@@ -56,6 +57,7 @@ repo. So the repo has to exist and the App has to be installed on it *before* th
 # Step 1: create/push the repo, set up the approval environment
 export GH_OWNER=<your-github-user-or-org>
 export REPO_NAME=changeflow-test-ruleset-bypass
+export REVIEWER_LOGIN=<github-login-for-the-required-reviewer>   # defaults to punitlad
 ./setup.sh
 
 # Step 2: install the App (manual, see setup.sh's printed instructions), THEN:
@@ -65,7 +67,8 @@ export APP_ID=<numeric App ID from the App settings page>
 
 `setup.sh` will:
 1. `gh repo create` (if `REPO_NAME` doesn't exist yet) and push this directory to it
-2. Create the `production` environment with `punitlad` as a required reviewer
+2. Create the `production` environment with `$REVIEWER_LOGIN` (`punitlad` by default) as a
+   required reviewer
 
 `finish-ruleset.sh` (after the App is installed) will:
 1. Create a branch ruleset on `main`: require a pull request + the `validate` status check,
@@ -84,7 +87,7 @@ export CHANGEFLOW_MERGE_MODE=ruleset_bypass
 export CHANGEFLOW_MERGE_METHOD=squash
 export CHANGEFLOW_APPROVAL_MODE=pending_deployments
 export CHANGEFLOW_PIPELINE_ENVIRONMENT=production
-export CHANGEFLOW_APPROVER_TOKEN=<a PAT for punitlad with repo + workflow scope>
+export CHANGEFLOW_APPROVER_TOKEN=<a PAT for whoever REVIEWER_LOGIN was set to (punitlad by default), with repo + workflow scope>
 # ...plus CHANGEFLOW_APP_ID / CHANGEFLOW_APP_PRIVATE_KEY / CHANGEFLOW_INSTALLATION_ID
 uvicorn changeflow.api:app
 curl -XPOST localhost:8000/team-onboardings -d '{"team":"payments","requested_by":"you"}'
@@ -113,4 +116,24 @@ pipeline," not a single run whose steps conditionally no-op), and changeflow's o
 of a shared job actually executed. `github.actor` was confirmed against a real run to reliably
 reflect the App's bot login for pushes resulting from its own API merges, which is what makes
 the `if:` scoping on both files trustworthy rather than guesswork.
+
+## Trade-offs for team discussion
+
+- **Largest trust grant of the three** — the App can merge its own PRs with no check and no
+  review, full stop. The bypass list is a standing grant, not a per-PR decision; anyone with
+  write access to the App's credentials can merge anything on this branch, any time the App
+  has an open PR.
+- **Fastest of the three** — `merging` → `merged` is near-instant, vs. ~30-40s waiting on a
+  check (`native_auto_merge`) or however long their own workflow takes to notice and act
+  (`workflow_gated`).
+- **One-time setup cost, not ongoing maintenance** — the trust grant is a ruleset config
+  change on their side, done once. Compare to `workflow_gated`, where they maintain a workflow
+  file whose correctness changeflow depends on indefinitely.
+- **The two-path design here (human + App, mutually exclusive pipelines) is *our* addition,
+  not inherent to the mode** — a target repo adopting `ruleset_bypass` doesn't have to support
+  a human path at all if they don't want one; we built it because we wanted ordinary
+  maintenance PRs to keep working without needing the App's bypass.
+- **Biggest ask of the target team** — "give our App's identity standing bypass rights on your
+  protected branch" is a harder sell than the other two modes' asks, and is the thing most
+  likely to need a security review on their end before they agree.
 <!-- scenario 1 validation run -->
