@@ -8,6 +8,9 @@
     },
     {
       "team": "team-two-path-verify"
+    },
+    {
+      "team": "team-mutex-verify"
     }
   ]
 }
