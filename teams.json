@@ -11,6 +11,9 @@
     },
     {
       "team": "team-mutex-verify"
+    },
+    {
+      "team": "team-scenario-2"
     }
   ]
 }
