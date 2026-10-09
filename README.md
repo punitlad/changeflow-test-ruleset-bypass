@@ -9,8 +9,8 @@ than on any check passing.
 | File | Purpose |
 |---|---|
 | `teams.json` | The file changeflow appends `{"team": "<name>"}` to |
-| `.github/workflows/ci.yml` | PR-time check — present so the ruleset isn't trivially empty; the App bypasses it, a human PR wouldn't |
-| `.github/workflows/deploy.yml` | The pipeline triggered by the merge, gated by the `production` environment |
+| `.github/workflows/ci.yml` | PR-time check, scoped to PRs opened by the App — the ruleset's required check (bypassed by the App, would block a human PR) |
+| `.github/workflows/deploy.yml` | The pipeline triggered by the merge, scoped to pushes actored by the App, gated by the `production` environment |
 | `setup.sh` | One-time `gh` CLI setup for this repo (ruleset + bypass actor, environment) |
 
 ## Why this mode specifically needs this layout
@@ -74,3 +74,18 @@ curl -XPOST localhost:8000/team-onboardings -d '{"team":"payments","requested_by
 `GET /team-onboardings/{id}` reaches `phase: succeeded` with `merging` → `merged` happening
 almost instantly (no wait on checks) — the App's `PUT /pulls/{n}/merge` call is what merges it,
 confirmed by the merge commit's author being the App's bot identity, not a human.
+
+## Identity-scoped gating (defense in depth on top of the bypass list)
+
+Both workflows here are scoped to the App's identity rather than running unconditionally:
+
+- `ci.yml`'s `validate` job only runs `if: github.event.pull_request.user.login ==
+  'my-changeflow-app[bot]'`. Since this repo's only expected PR author is changeflow, this is
+  safe; **don't** do this on a repo that also takes human PRs against the same required check
+  (a skipped job never posts a status, so a human PR would block forever).
+- `deploy.yml`'s `deploy` job only runs `if: github.actor == 'my-changeflow-app[bot]'`.
+  Verified against a real run that `github.actor` reliably reflects the App's bot login for
+  pushes resulting from its own API merges (not just the ruleset bypass actor's identity on
+  paper — the actual push event attribution). This means the production pipeline only
+  auto-fires for merges changeflow itself performed, even though the ruleset bypass alone
+  would also permit e.g. an admin's direct push to land on `main` and trigger the same event.
