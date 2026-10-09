@@ -1,12 +1,9 @@
-# Counterpart to deploy.yml: fires on the same push-to-main event, but only for merges
-# actually performed by changeflow's App identity, not any merge to main. Verified against
-# a real run that `github.actor` reliably reflects the App's bot login for pushes resulting
-# from its own API merges (actor == triggering_actor == bot login).
-#
-# Placeholder for anything that should happen specifically because changeflow did the merge
-# -- e.g. notifying wherever changeflow's job state doesn't already cover, writing an
-# App-specific audit trail, etc. -- as distinct from deploy.yml's general "something landed
-# on main" pipeline, which runs regardless of who merged it.
+# The App-path pipeline -- this is now what changeflow actually polls for this repo
+# (CHANGEFLOW_PIPELINE_WORKFLOW_FILE=app-merge.yml, see api-repo/.env.ruleset-bypass),
+# not deploy.yml. Mutually exclusive with deploy.yml: scoped to only the App's own merges,
+# verified against a real run that `github.actor` reliably reflects the App's bot login for
+# pushes resulting from its own API merges (actor == triggering_actor == bot login).
+# Gated behind "production" so changeflow's approve_pending step has something to approve.
 name: app-merge
 on:
   push:
@@ -15,8 +12,12 @@ jobs:
   record:
     if: github.actor == 'my-changeflow-app[bot]'
     runs-on: ubuntu-latest
+    environment: production
     steps:
+      - uses: actions/checkout@v4
       - name: "Record automated onboarding merge"
         run: |
           echo "Merged by changeflow (${{ github.actor }}): ${{ github.event.head_commit.message }}"
           echo "Commit: ${{ github.sha }}"
+          echo "Deploying with current teams:"
+          cat teams.json

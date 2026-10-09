@@ -1,18 +1,15 @@
-# The pipeline changeflow is waiting on (pipeline.py: `pipeline_workflow_file`).
-# Triggered on push to main, so the merge commit SHA from the PR identifies this run.
-# Gated behind the "production" environment so the approval step (pipeline.py:
-# approve_pending) has something to approve -- point CHANGEFLOW_APPROVER_TOKEN at a
-# user who is a required reviewer on that environment (see setup.sh in this repo).
-#
-# Deliberately UNSCOPED -- runs for a merge to main by anyone, human or the App. This is
-# "deploy to production," which should happen regardless of who merged the change. See
-# app-merge.yml for the App-specific counterpart action.
+# The human-path pipeline. Triggered on push to main, but scoped to exclude the App's own
+# merges -- those are app-merge.yml's job, not this one. The two are now mutually exclusive:
+# exactly one of deploy.yml / app-merge.yml runs its job per push, based on who merged.
+# Gated behind the "production" environment -- a human merge here needs a real approval
+# click (or API call), since nothing auto-approves it the way changeflow does for its own.
 name: deploy
 on:
   push:
     branches: [main]
 jobs:
   deploy:
+    if: github.actor != 'my-changeflow-app[bot]'
     runs-on: ubuntu-latest
     environment: production
     steps:

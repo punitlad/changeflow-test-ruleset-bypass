@@ -11,12 +11,18 @@ This repo deliberately supports **two ways onto `main`**, not just the App's:
 | Human | open a PR → `ci.yml`'s `validate` check must pass → merge normally | the ruleset (no bypass for a human identity) |
 | The App | open a PR (changeflow always does) → merge immediately via `PUT /pulls/{n}/merge` | the ruleset's bypass list |
 
-And correspondingly **two push-triggered actions**, not just one:
+And correspondingly **two mutually exclusive push-triggered pipelines**, one per path —
+exactly one of the two runs its job per push, based on `github.actor`:
 
-| Workflow | Fires on | Scope |
+| Workflow | Runs for | changeflow polls this? |
 |---|---|---|
-| `deploy.yml` | any push to `main` | unscoped — "deploy to production" happens regardless of who merged it; this is what changeflow polls (`pipeline_workflow_file`) |
-| `app-merge.yml` | any push to `main` | scoped `if: github.actor == 'my-changeflow-app[bot]'` — only runs for merges the App itself performed |
+| `deploy.yml` | human merges (`if: github.actor != 'my-changeflow-app[bot]'`) | no |
+| `app-merge.yml` | the App's own merges (`if: github.actor == 'my-changeflow-app[bot]'`) | **yes** — `CHANGEFLOW_PIPELINE_WORKFLOW_FILE=app-merge.yml` |
+
+changeflow's `find_run()` only ever looks at merge SHAs *it* produced, so it only cares about
+`app-merge.yml` here — set `CHANGEFLOW_PIPELINE_WORKFLOW_FILE=app-merge.yml` when pointing it at
+this repo (already set in `api-repo/.env.ruleset-bypass`), since the default
+(`deploy.yml`) now deliberately never runs for the App's merges.
 
 ## What's here
 
@@ -24,8 +30,8 @@ And correspondingly **two push-triggered actions**, not just one:
 |---|---|
 | `teams.json` | The file changeflow appends `{"team": "<name>"}` to |
 | `.github/workflows/ci.yml` | PR-time check, unscoped — the ruleset's required check, satisfied by either path |
-| `.github/workflows/deploy.yml` | The general pipeline triggered by any merge, gated by the `production` environment |
-| `.github/workflows/app-merge.yml` | The App-specific counterpart action, only runs when the merge was the App's own |
+| `.github/workflows/deploy.yml` | The human-path pipeline, gated by the `production` environment |
+| `.github/workflows/app-merge.yml` | The App-path pipeline — this is what changeflow actually polls, gated by the `production` environment |
 | `setup.sh` | One-time `gh` CLI setup for this repo (ruleset + bypass actor, environment) |
 
 ## Why this mode specifically needs this layout
@@ -86,20 +92,24 @@ curl -XPOST localhost:8000/team-onboardings -d '{"team":"payments","requested_by
 
 ## What "validated" looks like
 
-`GET /team-onboardings/{id}` reaches `phase: succeeded` with `merging` → `merged` happening
-almost instantly (no wait on checks) — the App's `PUT /pulls/{n}/merge` call is what merges it,
-confirmed by the merge commit's author being the App's bot identity, not a human.
+For the App path: `GET /team-onboardings/{id}` reaches `phase: succeeded` with `merging` →
+`merged` happening almost instantly (no wait on checks) — the App's `PUT /pulls/{n}/merge` call
+is what merges it. On GitHub, confirm `app-merge.yml` ran (`conclusion: success`) and
+`deploy.yml` did **not** run its job for that same SHA (`conclusion: skipped`, since
+`github.actor` was the App).
 
-## Why app-merge.yml is a separate workflow, not a scoped deploy.yml
+For the human path: open and merge a PR normally (no bypass), confirm `deploy.yml` ran and
+`app-merge.yml` skipped — the mirror image — and that the `production` approval has to be
+granted manually (or by whatever separate automation you stand up for human deploys; changeflow
+only auto-approves its own merges).
 
-An earlier version of this repo scoped `deploy.yml` itself to the App's identity
-(`if: github.actor == '...'`), on the theory that it's defense in depth against e.g. an
-admin's direct push also triggering a deploy. That was wrong for this repo: it also blocks the
-*human* path's merges from ever deploying, which defeats having two ways onto `main` in the
-first place. "Deploy to production" should happen for anyone's merge; "do something because
-changeflow specifically did it" is a separate concern — hence two workflows, not one scoped
-job. `github.actor` was confirmed (against a real run) to reliably reflect the App's bot login
-for pushes resulting from its own API merges, which is what makes `app-merge.yml`'s scoping
-trustworthy rather than guesswork.
+## Why two workflows instead of one shared, identity-branching workflow
 
-<!-- human-path test: this PR was opened and merged by a human (punitlad), not the App -->
+Both pipelines are gated behind the same `production` environment and read the same
+`teams.json`, but kept as separate files rather than one `deploy.yml` with an if/else inside:
+cleaner Actions UI history (each run is unambiguously "the human pipeline" or "the App
+pipeline," not a single run whose steps conditionally no-op), and changeflow's own
+`find_run()` only has to know one workflow filename to poll instead of parsing which branch
+of a shared job actually executed. `github.actor` was confirmed against a real run to reliably
+reflect the App's bot login for pushes resulting from its own API merges, which is what makes
+the `if:` scoping on both files trustworthy rather than guesswork.
