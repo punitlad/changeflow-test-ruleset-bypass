@@ -24,24 +24,35 @@ are coarser than the UI's.
 You need the App's **numeric App ID** for this (not the slug) — found at the top of
 `https://github.com/settings/apps/my-changeflow-app`.
 
+**Setup is two steps, in order, because GitHub rejects the bypass_actor otherwise:**
+`POST /rulesets` with an `Integration` bypass actor 422s with *"Actor ... integration must be
+part of the ruleset source or owner organization"* until the App is actually installed on the
+repo. So the repo has to exist and the App has to be installed on it *before* the ruleset step.
+
 ## One-time setup
 
 ```bash
+# Step 1: create/push the repo, set up the approval environment
 export GH_OWNER=<your-github-user-or-org>
 export REPO_NAME=changeflow-test-ruleset-bypass
-export APP_ID=<numeric App ID from the App settings page>
 ./setup.sh
+
+# Step 2: install the App (manual, see setup.sh's printed instructions), THEN:
+export APP_ID=<numeric App ID from the App settings page>
+./finish-ruleset.sh
 ```
 
 `setup.sh` will:
 1. `gh repo create` (if `REPO_NAME` doesn't exist yet) and push this directory to it
-2. Create a branch ruleset on `main`: require a pull request + the `validate` status check,
-   with the App (`actor_type=Integration`, `actor_id=$APP_ID`) on the bypass list
-3. Create the `production` environment with `punitlad` as a required reviewer
+2. Create the `production` environment with `punitlad` as a required reviewer
 
-Then **install your GitHub App on this repo** and, in the repo's ruleset UI, double-check the
-bypass is scoped to "Pull requests only" rather than "Always" if you want the App to still be
-blocked from e.g. force-pushing to `main` directly.
+`finish-ruleset.sh` (after the App is installed) will:
+1. Create a branch ruleset on `main`: require a pull request + the `validate` status check,
+   with the App (`actor_type=Integration`, `actor_id=$APP_ID`) on the bypass list
+
+Afterwards, double-check in the repo's ruleset UI (Settings → Rules → Rulesets →
+main-protection) that the bypass is scoped to "Pull requests only" rather than "Always" if you
+want the App to still be blocked from e.g. force-pushing to `main` directly.
 
 ## Run changeflow against it
 
