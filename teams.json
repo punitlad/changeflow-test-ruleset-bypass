@@ -2,6 +2,9 @@
   "teams": [
     {
       "team": "team-nam-run"
+    },
+    {
+      "team": "team-new-two"
     }
   ]
 }
