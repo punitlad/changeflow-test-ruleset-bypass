@@ -113,3 +113,4 @@ pipeline," not a single run whose steps conditionally no-op), and changeflow's o
 of a shared job actually executed. `github.actor` was confirmed against a real run to reliably
 reflect the App's bot login for pushes resulting from its own API merges, which is what makes
 the `if:` scoping on both files trustworthy rather than guesswork.
+<!-- scenario 1 validation run -->
