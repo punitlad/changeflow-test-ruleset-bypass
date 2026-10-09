@@ -1,3 +1,7 @@
 {
-  "teams": []
+  "teams": [
+    {
+      "team": "team-nam-run"
+    }
+  ]
 }
