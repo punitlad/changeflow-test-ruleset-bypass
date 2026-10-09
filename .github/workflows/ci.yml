@@ -1,0 +1,16 @@
+# PR-time required check. This is the thing the branch ruleset requires before a merge
+# can happen -- native-auto-merge waits on it, ruleset-bypass would normally wait on it
+# too except our App is on the bypass list. Job id/name "validate" must match the
+# required_status_checks context configured in setup.sh.
+name: ci
+on:
+  pull_request:
+    branches: [main]
+jobs:
+  validate:
+    name: validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate teams.json is valid JSON
+        run: python3 -m json.tool teams.json > /dev/null

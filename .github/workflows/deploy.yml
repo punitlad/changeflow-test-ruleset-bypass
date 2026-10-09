@@ -1,0 +1,19 @@
+# The pipeline changeflow is waiting on (pipeline.py: `pipeline_workflow_file`).
+# Triggered on push to main, so the merge commit SHA from the PR identifies this run.
+# Gated behind the "production" environment so the approval step (pipeline.py:
+# approve_pending) has something to approve -- point CHANGEFLOW_APPROVER_TOKEN at a
+# user who is a required reviewer on that environment (see setup.sh in this repo).
+name: deploy
+on:
+  push:
+    branches: [main]
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - name: "Deploy (simulated)"
+        run: |
+          echo "Deploying with current teams:"
+          cat teams.json
